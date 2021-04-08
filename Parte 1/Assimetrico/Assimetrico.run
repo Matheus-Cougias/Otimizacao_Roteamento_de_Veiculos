@@ -1,0 +1,95 @@
+reset;
+option seed 0;
+#option solver cplexamp;
+option solver cplex;
+option solver_msg 0;
+model Assimetrico.md;
+
+problem tsp: x, tour, r1, sec;
+
+let is_optimal := false;
+let inicio := time();
+repeat while (is_optimal == false)
+{
+  solve tsp > 'lixo.txt';
+  let nosIteracao := num0(sub(solve_message, '@*^([0-9]+) branch-and@*', '\1'));
+  let nosTotais := nosTotais + if nosIteracao == 0 then 1 else nosIteracao;   
+  let iteracao := iteracao + 1;
+  let lb := tour;
+  let _E := {(i,j) in E: x[i,j] > 0.9};
+  # nxt neighborhood
+  let _N := N;   
+  repeat while (card(_N) > 0)
+  {
+    let u := first(_N);
+    let T := {u};
+    repeat while (card(_E) > 0)
+    {
+      let v := -1;
+      for{(u,j) in _E}
+      {
+        let v := j;
+        break;
+      }
+      if (v == -1) then
+      {
+        for {(i,u) in _E}
+        {
+          let v := i;
+          break;
+        }
+      }
+      if (u != -1) and (v != -1) then 
+      {
+        let T := T union {v};
+        let _E := _E diff {(u,v),(v,u)};
+        let nxt[u] := v;
+        let u := v; 
+      }
+      else
+      {
+        break;
+      }
+    }
+    let _N := _N diff T;
+  }
+  # sec separation
+  let _N := N;
+  let nhold := nh;
+  repeat while (card(_N) > 0)
+  {
+    let u := first(_N);
+    let v := nxt[u];
+    let nh := nh + 1;
+    let S[nh] := {u};
+    repeat while (u != v)
+    {
+      let S[nh] := S[nh] union {v};
+      let v := nxt[v];
+    };
+    let _N := _N diff S[nh];
+  };
+  if (nh - nhold == 1) then
+  {
+    let is_optimal := true;
+  }
+  printf "iteracao= %d ", iteracao;
+  printf "nh= %d ", nh;
+  printf "lb= %.2f", tour;
+  printf "\n";
+};
+# tour found
+printf "Custo  : %10.2f\n",tour; 
+printf "Tempo     : %12ds\n",time() - inicio;
+printf "Nós B&B: %12d\n",nosTotais;
+printf "Rota : "; 
+printf "%d ", 1;
+let v := nxt[1];
+repeat while (v != 1)
+{
+   printf "%d ", v;
+   let v := nxt[v];
+}
+printf "%d ", 1;
+printf "\n";
+

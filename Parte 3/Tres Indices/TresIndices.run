@@ -1,0 +1,82 @@
+reset;
+option seed 0;
+#option solver cplexamp;
+option solver cplex;
+option cplex_options 'display = 1 mipdisplay = 2 mipgap = 0.00001 timelimit = 1800 return_mipgap = 1';
+option solver_msg 0;
+model TresIndices.md;
+
+problem tsp: tour, x, y, r1, r2, r3, r4, r5, r6, r7, r8;
+
+let is_optimal := false;
+let inicio := time();
+repeat while (is_optimal == false)
+{
+     solve tsp > 'lixo.txt';
+     let nosIteracao := num0(sub(solve_message, '@*^([0-9]+) branch-and@*', '\1'));
+     let nosTotais := nosTotais + if nosIteracao == 0 then 1 else nosIteracao;
+     let iteracao := iteracao + 1;
+     let lb := tour;
+     let W := K;
+     let{k in K, (i,j) in A: x[i,j,k] > 0.9} NEXT[i,k] := j;
+     let{k in K, (i,j) in A: x[i,j,k] > 0.9} PRED[j,k] := i;
+     let{k in K, i in N: i != 1 and y[i,k] > 0.9 } CAMINHAO[i] := k;
+     let NumeroRotas := 0;
+     
+#Posso testar para cada caminhão, cada uma das possível rotas, identificando
+#assim quais as subrotas do problema.
+    for {w in W}
+    {
+        let V := N;
+        repeat while (card(V) > 0)
+        {
+            let u := first(V);
+            if (w == CAMINHAO[u]) then
+            {
+                let V := V diff {u};
+                let v := NEXT[u,w];
+                let T := {u};
+                repeat while (u != v)
+                {
+                    let T := T union {v};
+                    let V := V diff {v};
+                    let v := NEXT[v,w];   
+                }
+                let banivel := true;
+                for {i in T}
+                {
+                    if (i == 1) then
+                    {
+                        let banivel := false;
+                    }   
+                }
+                if (banivel == true) then
+                {
+                    let nh := nh + 1;
+                    let S[nh] := T;
+                    let NumeroRotas := NumeroRotas + 1;  
+                }
+            }
+            else
+            {
+                let V := V diff{u};
+            }
+        } 
+    }
+    if (NumeroRotas == 0) then
+    {
+         let is_optimal := true;
+    }
+    printf "iteracao= %d ", iteracao;
+    printf "nh= %d ", nh;
+    printf "lb= %.2f", tour;
+    printf "\n";
+}
+         
+printf "Custo  : %10.2f\n",tour; 
+printf "Tempo     : %12ds\n",time() - inicio;
+printf "Nós B&B: %12d\n",nosTotais;
+printf "Rota : ";
+display x;
+
+end;

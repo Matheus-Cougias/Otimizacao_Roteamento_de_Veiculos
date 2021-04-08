@@ -1,0 +1,112 @@
+reset;
+option seed 0;
+#option solver cplexamp;
+option solver cplex;
+option cplex_options 'display = 1 mipdisplay = 2 mipgap = 0.00001 timelimit = 1800 return_mipgap = 1';
+option solver_msg 0;
+model MTZDI.md;
+
+problem DI: tour, x, r1DI, r2DI, r3DI, r4DI, r5DI;
+problem MTZ: tour, x, z, r1MTZ, r2MTZ, r3MTZ, r4MTZ, r5MTZ, r6MTZ, r7MTZ;
+
+let is_optimal := false;
+let stop := false;
+let inicio := time();
+repeat while (stop == false)
+{
+     solve DI > 'lixo.txt';
+     let nosIteracao := num0(sub(solve_message, '@*^([0-9]+) branch-and@*', '\1'));
+     let nosTotais := nosTotais + if nosIteracao == 0 then 1 else nosIteracao;
+     let iteracao := iteracao + 1;
+     let lb := tour;
+     let{(i,j) in A: x[i,j] > 0.9 and i != 1} NEXT[i] := j;
+     let{(i,j) in A: x[i,j] > 0.9 and j != 1} PRED[j] := i;
+     let Rota_Caminhao := 1;
+     for {i in N diff {1}}
+     {
+         if (PRED[i] == 1) then
+         {
+             let Rotas_Caminhoes[Rota_Caminhao] := i;
+             let Rota_Caminhao := Rota_Caminhao + 1;
+         }
+     }
+     let is_optimal := true;
+     let {i in N diff {1}} Pontos_Visitados[i] := 0;
+     for {k in 1..m}
+     {
+         let indice := Rotas_Caminhoes[k];
+         let DemandaSubrota := 0;
+         let Subrota := {};
+         repeat while (indice != 1)
+         {
+             let Subrota := Subrota union {indice};
+             let Pontos_Visitados[indice] := 1;
+             if (indice != 1) then
+             {
+                let DemandaSubrota := DemandaSubrota + d[indice];
+             }
+             let indice := NEXT[indice];
+         }
+         if (DemandaSubrota > Q) then
+         {
+             let is_optimal := false;
+             let nh := nh + 1;
+             let S[nh] := Subrota;
+             let coeficiente[nh] := ceil(DemandaSubrota/Q);
+         }
+         let Subrota := {};
+     }
+     let V := N;
+     for {i in N diff {1}}
+     {
+         if (Pontos_Visitados[i] == 1) then continue;
+         let is_optimal := false;
+         let Pontos_Visitados[i] := 1;
+         let indice := NEXT[i];
+         let Subrota := Subrota union {i};
+         repeat while (indice != i)
+         {
+             let Subrota := Subrota union {indice};
+             let Pontos_Visitados[indice] := 1;
+             let indice := NEXT[indice];
+         }
+         let nh := nh + 1;
+         let S[nh] := Subrota;
+         let coeficiente[nh] := ceil(sum{k in S[nh]} d[k] / Q);
+         let Subrota := {};
+     }
+    printf "iteracao= %d ", iteracao;
+    printf "nh= %d ", nh;
+    printf "lb= %.2f", tour;
+    printf "\n";
+    if (iteracao == n) then
+    {
+        let stop := true;
+    }
+    if (is_optimal == true) then
+    {
+        let stop := true;
+    }
+}   
+
+if (is_optimal == false) then
+{
+    solve MTZ > 'lixo.txt';
+
+    let nosIteracao := num0(sub(solve_message, '@*^([0-9]+) branch-and@*', '\1'));
+    let nosTotais := nosTotais + if nosIteracao == 0 then 1 else nosIteracao;
+    let mipgap := MTZ.relmipgap;
+}
+
+if (is_optimal == true) then
+{
+    let mipgap := 0;
+}
+
+printf "Custo  : %10.2f\n",tour; 
+printf "Tempo     : %12ds\n",time() - inicio;
+printf "Nós B&B: %12d\n",nosTotais;
+printf "Mipgap: %12f\n", mipgap;
+printf "Rota : ";
+display x;
+end;
